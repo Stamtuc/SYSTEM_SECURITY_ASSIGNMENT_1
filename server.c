@@ -8,6 +8,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+
 #define FAIL -1
 
 int OpenListener(int port) {
@@ -51,12 +52,32 @@ SSL_CTX* InitServerCTX(void) {
      * 4. Require a valid client certificate (mutual TLS) using SSL_CTX_set_verify
      *    with SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT
      */
-    SSL_CTX *ctx = NULL;
-
+    //SSL_CTX *ctx = NULL;
+    
+    const SSL_METHOD *method = TLS_server_method();
+    SSL_CTX *ctx = SSL_CTX_new(method);
     if (ctx == NULL) {
+        perror("Failure to create a new SSL_CTX object.");
         ERR_print_errors_fp(stderr);
         exit(EXIT_FAILURE);
     }
+
+    if( SSL_CTX_set_min_proto_version(ctx,TLS1_2_VERSION)!=1 ||
+         SSL_CTX_set_max_proto_version(ctx,TLS1_2_VERSION)!=1) {
+          perror("Failure to set TLS version.");
+          ERR_print_errors_fp(stderr);
+          exit(EXIT_FAILURE); 
+     }
+   
+    if(SSL_CTX_load_verify_locations(ctx, "ca.crt", NULL) != 1) {
+        perror("Failure to load CA certificate.");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+
+    
     return ctx;
 }
 
@@ -67,6 +88,25 @@ void LoadCertificates(SSL_CTX* ctx, char* CertFile, char* KeyFile) {
      * 3. Check that private key matches the certificate using SSL_CTX_check_private_key
      * On any failure: ERR_print_errors_fp(stderr) and exit
      */
+
+
+    if (SSL_CTX_use_certificate_file(ctx, CertFile, SSL_FILETYPE_PEM) != 1) {
+        fprintf(stderr, "Failed to load certificate %s\n", CertFile);
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, KeyFile, SSL_FILETYPE_PEM) != 1) {
+        fprintf(stderr, "Failed to load private key %s\n", KeyFile);
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_check_private_key(ctx) != 1) {
+        fprintf(stderr, "Private key does not match the certificate\n");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
 }
 
 void ShowCerts(SSL* ssl) {
@@ -76,7 +116,28 @@ void ShowCerts(SSL* ssl) {
      *    X509_NAME_oneline)
      * 3. Free the certificate with X509_free
      */
+    char *string;
+    X509 *cert = SSL_get1_peer_certificate(ssl);
+
+    if (cert == NULL) {
+        printf("No client certificate provided.\n");
+        return;
+    }
+
+    printf("Client certificate:\n");
+
+    string = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
+    printf("Subject: %s\n", string);
+    OPENSSL_free(string);
+
+    string = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+    printf("Issuer: %s\n", string);
+    OPENSSL_free(string);
+
+    X509_free(cert);
 }
+
+
 
 void Servlet(SSL* ssl) {
     char buf[1024] = {0};
@@ -124,6 +185,11 @@ int main(int argc, char *argv[]) {
      * 1. Initialize SSL context using InitServerCTX
      * 2. Load server certificate and key using LoadCertificates
      */
+    ctx = InitServerCTX();
+    LoadCertificates(ctx, "server.crt", "server.key");
+
+
+
 
     int server = OpenListener(port);
 
@@ -144,7 +210,9 @@ int main(int argc, char *argv[]) {
          * 2. Set file descriptor for SSL using SSL_set_fd
          * 3. Call Servlet to handle the client
          */
-        (void)ssl;
+        ssl = SSL_new(ctx);
+        SSL_set_fd(ssl, client);
+        Servlet(ssl);
     }
 
     close(server);
