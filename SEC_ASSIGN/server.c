@@ -165,7 +165,26 @@ void Servlet(SSL* ssl) {
      * 3. Send the XML response from the assignment if they match,
      *    otherwise send "Invalid Message"
      */
+    char username[64] = {0};
+    char password[64] = {0};
+    int end = 0;
+    const char *valid_response =
+        "<Body><Name>ECE Lab</Name><Year>2026</Year>"
+        "<Topic>Mutual TLS with OpenSSL</Topic>"
+        "<Author>Technical University of Crete</Author></Body>";
+    const char *invalid_response = "Invalid Message";
+    const char *reply;
 
+    if (sscanf(buf, "<Body><UserName>%63[^<]</UserName><Password>%63[^<]</Password></Body>%n", username, password, &end) == 2
+        && end != 0 && buf[end] == '\0'
+        && strcmp(username, "Sousi") == 0
+        && strcmp(password, "123") == 0) {
+        reply = valid_response;
+    } else {
+        reply = invalid_response;
+    }
+
+    SSL_write(ssl, reply, strlen(reply));
 cleanup:
     SSL_shutdown(ssl);
     SSL_free(ssl);
