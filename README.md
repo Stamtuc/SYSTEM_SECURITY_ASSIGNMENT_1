@@ -102,8 +102,6 @@ FraudCA is not in the server's trusted CA file (ca.crt). The server therefore te
 
 What would change with TLS 1.3?
 
-The server would still refuse the connection.In TLS 1.3 "the last peer to communicate in the handshake is the client" (OpenSSL, SSL_connect(3)).
-The rclient's SSL_connect(),therefore succeeds,and the "unknown ca" alert is received later, on SSL_read(). 
-
-The server would still refuse the connection.In TLS 1.3 "the last peer to communicate in the handshake is the client" (OpenSSL, SSL_connect(3)).
-The rclient's SSL_connect(),therefore succeeds,and the "unknown ca" alert is received later, on SSL_read(). 
+In TLS 1.3 "the last peer to communicate in the handshake is the client" (OpenSSL, SSL_connect(3)).
+The rclient's SSL_connect() therefore succeeds, and the "unknown ca" alert is received later, on SSL_read().
+The server would still refuse the connection.
